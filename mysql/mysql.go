@@ -120,7 +120,7 @@ func (l *MySQLDB) CustomQuery(query string, args ...interface{}) error {
 
 func (l *MySQLDB) GetInvoicesByStatus(status string, date string) ([]models.InvoiceCheck, error) {
 	rows, err := l.db.Query(
-		"SELECT i.id, i.external_id, i.amount_in, i.service_id, e.name, e.endpoint, se.api_key FROM invoices i INNER JOIN service_exchangers se ON se.service_id = i.service_id INNER JOIN exchangers e ON e.id = i.exchanger_id AND se.exchanger_id = e.id WHERE i.status = ? AND i.expiry_at <= ? AND i.external_id IS NOT NULL ORDER BY e.id",
+		"SELECT i.id, i.external_id, i.amount_in, i.service_id, e.name, e.endpoint, se.api_key FROM invoices i INNER JOIN service_exchangers se ON se.service_id = i.service_id INNER JOIN exchangers e ON e.id = i.exchanger_id AND se.exchanger_id = e.id WHERE i.status = ? AND i.expiry_at <= ? AND i.external_id IS NOT NULL AND i.expiry_at IS NOT NULL ORDER BY e.id",
 		status, date,
 	)
 	if err != nil {
