@@ -10,6 +10,7 @@ require (
 
 require (
 	github.com/cloudflare/golz4 v0.0.0-20150217214814-ef862a3cdc58 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 )

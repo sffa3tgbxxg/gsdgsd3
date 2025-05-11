@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/joho/godotenv"
 	"log"
+	"os"
 	"payment-service-go/models"
 	"time"
 )
@@ -15,7 +17,19 @@ type MySQLDB struct {
 }
 
 func NewMySQLDB() (*MySQLDB, error) {
-	db, err := sql.Open("mysql", "root@tcp(localhost:3306)/payment_service?charset=utf8mb4&parseTime=true")
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Ошибка загрузки .env файла: %v", err)
+	}
+
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbUser := os.Getenv("DB_USERNAME")
+	dbPass := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_DATABASE")
+
+	dsn := dbUser + ":" + dbPass + "@tcp(" + dbHost + ":" + dbPort + ")/" + dbName + "?charset=utf8mb4&parseTime=true"
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
 	}

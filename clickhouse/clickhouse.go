@@ -2,8 +2,10 @@ package clickhouse
 
 import (
 	"database/sql"
+	"fmt"
 	_ "github.com/ClickHouse/clickhouse-go"
 	"log"
+	"os"
 	"payment-service-go/models"
 	"time"
 )
@@ -13,7 +15,16 @@ type ClickDB struct {
 }
 
 func NewClickDB() (*ClickDB, error) {
-	db, err := sql.Open("clickhouse", "tcp://localhost:9000?database=paymentswh&username=default&password=12345678")
+	chHost := os.Getenv("CLICKHOUSE_HOST")     // localhost
+	chPort := os.Getenv("CLICKHOUSE_PORT")     // 9000
+	chDB := os.Getenv("CLICKHOUSE_DATABASE")   // paymentswh
+	chUser := os.Getenv("CLICKHOUSE_USERNAME") // default
+	chPass := os.Getenv("CLICKHOUSE_PASSWORD") // 12345678
+
+	dsn := fmt.Sprintf("tcp://%s:%s?database=%s&username=%s&password=%s",
+		chHost, chPort, chDB, chUser, chPass)
+
+	db, err := sql.Open("clickhouse", dsn)
 	if err != nil {
 		return nil, err
 	}

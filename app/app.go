@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/joho/godotenv"
 	"github.com/streadway/amqp"
 	"log"
+	"os"
 	"payment-service-go/exchanger"
 	"payment-service-go/models"
 	"payment-service-go/rabbit"
@@ -35,7 +37,17 @@ func NewApp(rabbitConn *rabbit.RabbitMQ) (*App, error) {
 }
 
 func main() {
-	rabbitConn, err := rabbit.NewRabbitMQ("amqp://guest:guest@localhost:5672/")
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Ошибка загрузки .env файла: %v", err)
+	}
+
+	rbHost := os.Getenv("RABBITMQ_HOST")
+	rbPort := os.Getenv("RABBITMQ_PORT")
+	rbUser := os.Getenv("RABBITMQ_USER")
+	rbPass := os.Getenv("RABBITMQ_PASSWORD")
+
+	rabbitConn, err := rabbit.NewRabbitMQ("amqp://" + rbUser + ":" + rbPass + "@" + rbHost + ":" + rbPort + "/")
 	if err != nil {
 		log.Fatalf("RabbitMQ error: %v", err)
 	}
