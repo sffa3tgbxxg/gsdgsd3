@@ -9,6 +9,8 @@ import (
 	"log"
 	"os"
 	"payment-service-go/models"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -56,6 +58,25 @@ func (l *MySQLDB) UpdateInvoice(invoiceID uint64, exchangerId uint32, details mo
 		return err
 	}
 	log.Printf("MySQL: Invoice %d обновлён, status=%s, exchanger=%d", invoiceID, "pending", exchangerId)
+	return nil
+}
+
+func (l *MySQLDB) UpdateGrooupInvoicesStatus(invoicesIDs []uint64, status string) error {
+	strArr := make([]string, len(invoicesIDs))
+	for i, num := range invoicesIDs {
+		strArr[i] = strconv.FormatUint(num, 10)
+	}
+	
+	invoicesIDsForQuery := strings.Join(strArr, ",")
+
+	_, err := l.db.Exec(
+		"UPDATE invoices SET status = ? WHERE id IN (?)", status, invoicesIDsForQuery)
+
+	if err != nil {
+		log.Printf("Ошибка MySQL при обработке массово инвойсов %v", err)
+		return err
+	}
+
 	return nil
 }
 

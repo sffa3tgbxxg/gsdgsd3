@@ -109,7 +109,7 @@ func (p *Processor) ProcessInvoices() error {
 			exchanger = NewLuckyPayExchanger(group.Exchanger)
 			break
 		default:
-			log.Printf("Обменник %s не поддерживается", group.Exchanger.Name)
+			p.cancelInvoices(group.Invoices)
 			continue
 		}
 
@@ -121,6 +121,19 @@ func (p *Processor) ProcessInvoices() error {
 	}
 
 	return nil
+}
+
+func (p *Processor) cancelInvoices(invoices []models.InvoiceCheckLite) {
+	var IDs []uint64
+
+	for _, inv := range invoices {
+		IDs = append(IDs, inv.ID)
+	}
+
+	err := p.MysqlLogger.UpdateGrooupInvoicesStatus(IDs, "cancel_time")
+	if err != nil {
+		log.Printf("Не удалось отменить массово счета. Error: %v", err)
+	}
 }
 
 func (p *Processor) SuccessGetRequisites(task models.InvoiceTask, exchangerTask models.Exchanger, details models.DetailsRequisites) error {
