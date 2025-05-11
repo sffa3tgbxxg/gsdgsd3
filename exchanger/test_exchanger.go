@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"payment-service-go/models"
+	"time"
 )
 
 type TestExchanger struct {
