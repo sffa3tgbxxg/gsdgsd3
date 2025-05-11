@@ -74,9 +74,8 @@ func (p *Processor) Process(task models.InvoiceTask) (string, error) {
 }
 
 func (p *Processor) ProcessInvoices() error {
-	t := time.Now().AddDate(0, 0, -3)
-	startOfDay := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()).Format("2006-01-02 15:04:05")
-	invoices, err := p.MysqlLogger.GetInvoicesByStatus("pending", startOfDay)
+	now := time.Now().Format("2006-01-02 15:04:05")
+	invoices, err := p.MysqlLogger.GetInvoicesByStatus("pending", now)
 
 	if err != nil {
 		return err
