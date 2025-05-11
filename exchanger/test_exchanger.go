@@ -54,8 +54,13 @@ func (t *TestExchanger) ReturnFormattedDetails(data map[string]interface{}) (mod
 		"details": details,
 	}
 
+	nowUTC := time.Now().UTC()
+	untilAt := (nowUTC.Add(20 * time.Minute)).Format("2006-01-02 15:04:05")
+
 	return models.DetailsRequisites{
 		ID:         id,
+		AmountIn:   t.config.Amount,
+		UntilAt:    untilAt,
 		Requisites: requisites,
 		Details:    detailsData,
 	}, nil
