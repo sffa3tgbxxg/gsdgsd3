@@ -48,6 +48,9 @@ func (p *Processor) Process(task models.InvoiceTask) (string, error) {
 		case "LuckyPay":
 			exchanger = NewLuckyPayExchanger(ex)
 			break
+		case "Test":
+			exchanger = NewTestExchanger(ex)
+			break
 		default:
 			log.Printf("Обменник %s не поддерживается", ex.Name)
 			continue
@@ -116,27 +119,6 @@ func (p *Processor) ProcessInvoices() error {
 			return fmt.Errorf("Не удалось проверить счета error: %v", err)
 		}
 	}
-
-	//log.Printf("Счета: %v", grouped)
-
-	//for _, inv := range grouped {
-	//	var exchanger Exchanger
-	//	switch inv.Exchanger.Name {
-	//	case "Обмен быстро":
-	//		exchanger = NewTestExchanger(inv) // Передаём всю структуру Exchanger
-	//	case "Greengo":
-	//		exchanger = NewGreengoExchanger(inv)
-	//	case "LuckyPay":
-	//		exchanger = NewLuckyPayExchanger(inv)
-	//	default:
-	//		log.Printf("Обменник %s не поддерживается", ex.Name)
-	//		continue
-	//	}
-	//}
-
-	//exchnager.
-
-	//log.Printf("Счета: %v", invoices)
 
 	return nil
 }
