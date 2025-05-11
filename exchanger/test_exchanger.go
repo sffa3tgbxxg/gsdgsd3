@@ -44,7 +44,7 @@ func (t *TestExchanger) ReturnFormattedDetails(data map[string]interface{}) (mod
 		return models.DetailsRequisites{}, errors.New("Не удалось получить 'Requisites'")
 	}
 
-	details, ok := data["requisites"].(map[string]interface{})
+	details, ok := data["details"].(map[string]interface{})
 	if !ok {
 		return models.DetailsRequisites{}, errors.New("Не удалось получить 'Details'")
 	}
