@@ -1,0 +1,121 @@
+package clickhouse
+
+import (
+	"database/sql"
+	_ "github.com/ClickHouse/clickhouse-go"
+	"log"
+	"payment-service-go/models"
+	"time"
+)
+
+type ClickDB struct {
+	db *sql.DB
+}
+
+func NewClickDB() (*ClickDB, error) {
+	db, err := sql.Open("clickhouse", "tcp://localhost:9000?database=paymentswh&username=default&password=12345678")
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	log.Println("ClickHouse подключен")
+	return &ClickDB{db: db}, nil
+}
+
+func (l *ClickDB) LogAnalytics(invoiceID uint64, status, exchangerName string, duration float64, createdAt time.Time) error {
+	tx, err := l.db.Begin()
+	if err != nil {
+		log.Printf("Ошибка начала транзакции (analytics): %v", err)
+		return err
+	}
+
+	_, err = tx.Exec(`
+        INSERT INTO exchangers_analytics (invoice_id, status, exchanger_name, request_duration_ms, created_at, processed_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `, invoiceID, status, exchangerName, duration, createdAt, time.Now())
+
+	if err != nil {
+		tx.Rollback()
+		log.Printf("Ошибка ClickHouse (analytics): %v", err)
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Ошибка коммита (analytics): %v", err)
+		return err
+	}
+
+	log.Printf("ClickHouse: Записано в exchangers_analytics, invoice_id=%d, status=%s", invoiceID, status)
+	return nil
+}
+
+func (l *ClickDB) LogErrorApiRequests(invoiceID uint64, exchangerId uint32, errorMessage string) error {
+	tx, err := l.db.Begin()
+	if err != nil {
+		log.Printf("Ошибка начала транзакции (analytics): %v", err)
+		return err
+	}
+
+	_, err = tx.Exec(`
+        INSERT INTO api_error_requests (invoice_id, exchanger_id, error_message, time)
+        VALUES (?, ?, ?, ?)
+    `, invoiceID, exchangerId, errorMessage, time.Now())
+
+	if err != nil {
+		errRollback := tx.Rollback()
+		if errRollback != nil {
+			log.Printf("Не удалось выполнить rollback clickhouse (api_requests): %v", errRollback)
+		}
+
+		log.Printf("Ошибка ClickHouse (api_requests): %v", err)
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Ошибка коммита (api_requests): %v", err)
+		return err
+	}
+
+	log.Printf("ClickHouse: Записана ошибка для invoice_id=%d, exchanger=%s", invoiceID, exchangerId)
+	return nil
+}
+
+func (l *ClickDB) LogErrorInvoice(invoice models.Invoice, errorMessage string) error {
+	tx, err := l.db.Begin()
+	if err != nil {
+		log.Printf("Ошибка начала транзакции (analytics): %v", err)
+		return err
+	}
+
+	_, err = tx.Exec(`
+        INSERT INTO invoices_errors_logs (invoice_id, error_message, time)
+        VALUES (?, ?, ?, ?)
+    `, invoice.ID, errorMessage, time.Now())
+
+	if err != nil {
+		errRollback := tx.Rollback()
+		if errRollback != nil {
+			log.Printf("Не удалось выполнить rollback clickhouse (api_requests): %v", errRollback)
+		}
+
+		log.Printf("Ошибка ClickHouse (api_requests): %v", err)
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Ошибка коммита (api_requests): %v", err)
+		return err
+	}
+
+	log.Printf("ClickHouse: Записана ошибка для invoice_id=%d", invoice.ID)
+	return nil
+}
+
+func (l *ClickDB) Close() {
+	if l.db != nil {
+		l.db.Close()
+	}
+}
