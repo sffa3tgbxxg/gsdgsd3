@@ -19,7 +19,10 @@ type LuckyPayExchanger struct {
 }
 
 func NewLuckyPayExchanger(config models.Exchanger, processor *Processor) *LuckyPayExchanger {
-	return &LuckyPayExchanger{config: config, processor: processor}
+	return &LuckyPayExchanger{
+		config:    config,
+		processor: processor,
+	}
 }
 
 func (l *LuckyPayExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, serviceID uint64) error {

@@ -168,6 +168,7 @@ func (a *App) handleMessage(msg amqp.Delivery, processor *exchanger.Processor) {
 			time.Now().Format("2006-01-02 15:04:05"),
 			task.Invoice.ID,
 		)
+		processor.ClickLogger.InvoiceHistoryInsert(task.Invoice.ID, "golang_handle_message", "cancel_invalid", nil, nil)
 
 		processor.ClickLogger.LogErrorInvoice(task.Invoice, "Невалидная задача: "+err.Error())
 		log.Printf("Невалидная задача %d: %v", task.Invoice.ID, err)
@@ -181,6 +182,7 @@ func (a *App) handleMessage(msg amqp.Delivery, processor *exchanger.Processor) {
 			time.Now().Format("2006-01-02 15:04:05"),
 			task.Invoice.ID,
 		)
+		processor.ClickLogger.InvoiceHistoryInsert(task.Invoice.ID, "golang_handle_message", "cancel_search", nil, nil)
 		log.Printf("Заявка %d просрочена", task.Invoice.ID)
 		return
 	}

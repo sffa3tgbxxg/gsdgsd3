@@ -160,9 +160,38 @@ func (l *ClickDB) ApiRequests(endpoint string, statusCode int, response string, 
 	return nil
 }
 
-//func (l *ClickDB) InvoiceHistoryInsert() error {
-//
-//}
+func (l *ClickDB) InvoiceHistoryInsert(invoiceId uint64, updatedBy string, status string, userId *uint64, details *string) error {
+	tx, err := l.db.Begin()
+	if err != nil {
+		log.Printf("Ошибка начала транзакции (analytics): %v", err)
+		return err
+	}
+
+	timeNow := time.Now().UTC().Format("2006-01-02 15:04:05")
+
+	_, err = tx.Exec(`
+        INSERT INTO invoice_history (invoice_id, status, updated_by, user_id, details, time)
+        VALUES (?, ?, ?, ?)
+    `, invoiceId, status, updatedBy, userId, details, timeNow)
+
+	if err != nil {
+		errRollback := tx.Rollback()
+		if errRollback != nil {
+			log.Printf("Не удалось выполнить rollback clickhouse (invoice_history): %v", errRollback)
+		}
+
+		log.Printf("Ошибка ClickHouse (invoice_history): %v", err)
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Ошибка коммита (invoice_history): %v", err)
+		return err
+	}
+
+	log.Printf("ClickHouse: записан запрос к апи")
+	return nil
+}
 
 func (l *ClickDB) Close() {
 	if l.db != nil {

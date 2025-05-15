@@ -108,7 +108,7 @@ func (p *Processor) ProcessInvoices() error {
 			exchanger = NewGreengoExchanger(group.Exchanger, p)
 			break
 		case "LuckyPay":
-			exchanger = NewLuckyPayExchanger(group.Exchanger)
+			exchanger = NewLuckyPayExchanger(group.Exchanger, p)
 			break
 		default:
 			p.cancelInvoices(group.Invoices)
@@ -135,6 +135,9 @@ func (p *Processor) cancelInvoices(invoices []models.InvoiceCheckLite) {
 	err := p.MysqlLogger.UpdateGrooupInvoicesStatus(IDs, "cancel_time")
 	if err != nil {
 		log.Printf("Не удалось отменить массово счета. Error: %v", err)
+	}
+	for _, invID := range IDs {
+		p.ClickLogger.InvoiceHistoryInsert(invID, "golang_cancel_time", "cancel_time", nil, nil)
 	}
 }
 
