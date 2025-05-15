@@ -40,7 +40,9 @@ func (g *GreengoExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, ser
 		return err
 	}
 
-	req, err := http.NewRequest("POST", g.config.Endpoint+"/api/v2/order/check/", bytes.NewBuffer(reqBody))
+	urlApi := g.config.Endpoint + "/api/v2/order/check/"
+
+	req, err := http.NewRequest("POST", urlApi, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return err
 	}
@@ -63,6 +65,8 @@ func (g *GreengoExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, ser
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
 		return errors.New("[Greengo] сервер вернул ошибку: " + string(body))
 	}
+
+	g.processor.ClickLogger.ApiRequests(urlApi, resp.StatusCode, string(body), string(reqBody), task.Invoice.ID, ex.ID)
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -155,7 +159,9 @@ func (g *GreengoExchanger) GetRequisites(task models.InvoiceTask, ex models.Exch
 		return models.DetailsRequisites{}, err
 	}
 
-	req, err := http.NewRequest("POST", ex.Endpoint+"/api/v2/order/create", bytes.NewBuffer(reqBody))
+	urlApi := ex.Endpoint + "/api/v2/order/create"
+
+	req, err := http.NewRequest("POST", urlApi, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return models.DetailsRequisites{}, err
 	}
@@ -188,6 +194,8 @@ func (g *GreengoExchanger) GetRequisites(task models.InvoiceTask, ex models.Exch
 	if result["response"] != "success" {
 		return models.DetailsRequisites{}, errors.New(result["response"].(string))
 	}
+
+	g.processor.ClickLogger.ApiRequests(urlApi, resp.StatusCode, string(body), string(reqBody), task.Invoice.ID, ex.ID)
 
 	// Проверка, что items — слайс и не пустой
 	itemsRaw, ok := result["items"].([]interface{})

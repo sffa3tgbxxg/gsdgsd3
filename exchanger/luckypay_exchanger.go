@@ -14,11 +14,12 @@ import (
 )
 
 type LuckyPayExchanger struct {
-	config models.Exchanger
+	config    models.Exchanger
+	processor *Processor
 }
 
-func NewLuckyPayExchanger(config models.Exchanger) *LuckyPayExchanger {
-	return &LuckyPayExchanger{config: config}
+func NewLuckyPayExchanger(config models.Exchanger, processor *Processor) *LuckyPayExchanger {
+	return &LuckyPayExchanger{config: config, processor: processor}
 }
 
 func (l *LuckyPayExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, serviceID uint64) error {
@@ -149,7 +150,7 @@ func (l *LuckyPayExchanger) GetRequisites(task models.InvoiceTask, ex models.Exc
 
 	// Шаблон тела
 	bodyMap := map[string]interface{}{
-		"client_order_id":          strconv.FormatUint(task.Invoice.ID, 10),
+		"client_order_id":          fmt.Sprintf("%d", task.Invoice.ID),
 		"order_side":               "Buy",
 		"payment_method_id":        "8fe3669a-a448-4053-bc4b-43bb51cb3e9d", // банковская карта
 		"amount":                   strconv.FormatFloat(ex.Amount, 'f', -1, 64),
@@ -162,7 +163,9 @@ func (l *LuckyPayExchanger) GetRequisites(task models.InvoiceTask, ex models.Exc
 			return nil, nil, err
 		}
 
-		req, err := http.NewRequest("POST", ex.Endpoint+"/api/v1/order/", bytes.NewBuffer(reqBody))
+		urlApi := ex.Endpoint + "/api/v1/order/"
+
+		req, err := http.NewRequest("POST", urlApi, bytes.NewBuffer(reqBody))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -184,6 +187,8 @@ func (l *LuckyPayExchanger) GetRequisites(task models.InvoiceTask, ex models.Exc
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
 			return nil, body, errors.New("сервер вернул ошибку")
 		}
+
+		l.processor.ClickLogger.ApiRequests(urlApi, resp.StatusCode, string(body), string(reqBody), task.Invoice.ID, ex.ID)
 
 		return resp, body, nil
 	}

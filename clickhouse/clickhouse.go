@@ -101,10 +101,12 @@ func (l *ClickDB) LogErrorInvoice(invoice models.Invoice, errorMessage string) e
 		return err
 	}
 
+	timeNow := time.Now().UTC().Format("2006-01-02 15:04:05")
+
 	_, err = tx.Exec(`
         INSERT INTO invoices_errors_logs (invoice_id, error_message, time)
         VALUES (?, ?, ?, ?)
-    `, invoice.ID, errorMessage, time.Now())
+    `, invoice.ID, errorMessage, timeNow)
 
 	if err != nil {
 		errRollback := tx.Rollback()
@@ -124,6 +126,43 @@ func (l *ClickDB) LogErrorInvoice(invoice models.Invoice, errorMessage string) e
 	log.Printf("ClickHouse: Записана ошибка для invoice_id=%d", invoice.ID)
 	return nil
 }
+
+func (l *ClickDB) ApiRequests(endpoint string, statusCode int, response string, params string, invoiceId uint64, exchangerId uint32) error {
+	tx, err := l.db.Begin()
+	if err != nil {
+		log.Printf("Ошибка начала транзакции (analytics): %v", err)
+		return err
+	}
+
+	timeNow := time.Now().UTC().Format("2006-01-02 15:04:05")
+
+	_, err = tx.Exec(`
+        INSERT INTO api_requests (invoice_id, exchanger_id, status_code, endpoint, params, response, time)
+        VALUES (?, ?, ?, ?)
+    `, invoiceId, exchangerId, statusCode, endpoint, params, response, timeNow)
+
+	if err != nil {
+		errRollback := tx.Rollback()
+		if errRollback != nil {
+			log.Printf("Не удалось выполнить rollback clickhouse (api_requests): %v", errRollback)
+		}
+
+		log.Printf("Ошибка ClickHouse (api_requests): %v", err)
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Ошибка коммита (api_requests): %v", err)
+		return err
+	}
+
+	log.Printf("ClickHouse: записан запрос к апи")
+	return nil
+}
+
+//func (l *ClickDB) InvoiceHistoryInsert() error {
+//
+//}
 
 func (l *ClickDB) Close() {
 	if l.db != nil {

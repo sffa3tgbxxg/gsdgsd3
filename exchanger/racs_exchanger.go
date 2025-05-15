@@ -10,23 +10,24 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"payment-service-go/models"
+	"strconv"
 	"time"
 )
 
-type BitlogaExchanger struct {
+type RacksExchanger struct {
 	config    models.Exchanger
 	processor Processor
 }
 
-func NewBitlogaExchanger(config models.Exchanger, processor *Processor) *BitlogaExchanger {
-	return &BitlogaExchanger{config: config, processor: *processor}
+func NewRacksExchanger(config models.Exchanger, processor *Processor) *RacksExchanger {
+	return &RacksExchanger{config: config, processor: *processor}
 }
 
-func (g *BitlogaExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, serviceID uint64) error {
+func (r *RacksExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, serviceID uint64) error {
 	client := &http.Client{Timeout: 8 * time.Second}
 
-	// Шаблон тела
 	bodyMap := map[string]interface{}{
 		"action": "details",
 	}
@@ -37,18 +38,18 @@ func (g *BitlogaExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, ser
 			return nil, nil, err
 		}
 
-		req, err := http.NewRequest("POST", g.config.Endpoint+"/api/v1/order/", bytes.NewBuffer(reqBody))
+		req, err := http.NewRequest("POST", r.config.Endpoint+"/api/v1/order/", bytes.NewBuffer(reqBody))
 		if err != nil {
 			return nil, nil, err
 		}
 
-		h := hmac.New(sha512.New, []byte(g.config.SecretKey))
+		h := hmac.New(sha512.New, []byte(r.config.SecretKey))
 		h.Write([]byte(reqBody))
 		signature := fmt.Sprintf("%x", h.Sum(nil))
 
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
-		req.Header.Set("X-APIKEY", g.config.APIKey)
+		req.Header.Set("X-APIKEY", r.config.APIKey)
 		req.Header.Set("X-SIGNATURE", signature)
 
 		resp, err := client.Do(req)
@@ -90,7 +91,7 @@ func (g *BitlogaExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, ser
 			continue
 		}
 
-		err = g.processStatusInvoice(processor, invoice, status)
+		err = r.processStatusInvoice(processor, invoice, status)
 
 		if err != nil {
 			fmt.Errorf("[Bitloga] не удалось обрабатотать статус у InvoiceID: %v, error: %v", invoice.ID, err)
@@ -101,7 +102,7 @@ func (g *BitlogaExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, ser
 	return nil
 }
 
-func (g *BitlogaExchanger) processStatusInvoice(processor *Processor, invoice models.InvoiceCheckLite, orderStatus string) error {
+func (r *RacksExchanger) processStatusInvoice(processor *Processor, invoice models.InvoiceCheckLite, orderStatus string) error {
 	switch orderStatus {
 	case "Payed":
 		err := processor.MysqlLogger.UpdateInvoiceStatus(invoice, "paid")
@@ -126,39 +127,24 @@ func (g *BitlogaExchanger) processStatusInvoice(processor *Processor, invoice mo
 	return nil
 }
 
-func (g *BitlogaExchanger) GetRequisites(task models.InvoiceTask, ex models.Exchanger) (models.DetailsRequisites, error) {
+func (r *RacksExchanger) GetRequisites(task models.InvoiceTask, ex models.Exchanger) (models.DetailsRequisites, error) {
 
-	// Данные для запроса
-	data := map[string]interface{}{
-		"action":   "invoice",
-		"uniqueid": fmt.Sprintf("%v", task.Invoice.ID),
-		"paysys":   "RUBBALANCE",
-		"amount":   ex.Amount,
-		"comis":    "payer",
-		"name":     "test",
-		"surname":  "test2",
-	}
+	data := url.Values{}
+	data.Set("amount", strconv.FormatFloat(ex.Amount, 'f', -1, 64))
+	data.Set("typecommission", "1")
+	data.Set("private_key", ex.SecretKey)
+	data.Set("currency", "RUB")
 
-	reqBody, err := json.Marshal(data)
-	if err != nil {
-		fmt.Println("Ошибка сериализации JSON:", err)
-		return models.DetailsRequisites{}, err
-	}
-	fmt.Println("JSON тело:", string(reqBody))
+	encoded := data.Encode()
 
-	urlApi := ex.Endpoint + "/api/v1/"
-	req, err := http.NewRequest("POST", urlApi, bytes.NewBuffer(reqBody))
+	urlApi := ex.Endpoint + "/fiat_api?" + encoded
+	req, err := http.NewRequest("GET", urlApi, nil)
 	if err != nil {
 		return models.DetailsRequisites{}, err
 	}
-
-	h := hmac.New(sha512.New, []byte(ex.SecretKey))
-	h.Write(reqBody)
-	signature := fmt.Sprintf("%x", h.Sum(nil))
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-APIKEY", ex.APIKey)
-	req.Header.Set("X-SIGNATURE", signature)
+	req.Header.Set("Authorization", "Bearer "+ex.APIKey)
 
 	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Do(req)
@@ -176,7 +162,7 @@ func (g *BitlogaExchanger) GetRequisites(task models.InvoiceTask, ex models.Exch
 		return models.DetailsRequisites{}, errors.New("сервер вернул ошибку: " + string(body))
 	}
 
-	g.processor.ClickLogger.ApiRequests(urlApi, resp.StatusCode, string(body), string(reqBody), task.Invoice.ID, ex.ID)
+	r.processor.ClickLogger.ApiRequests(urlApi, resp.StatusCode, string(body), encoded, task.Invoice.ID, ex.ID)
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -184,45 +170,59 @@ func (g *BitlogaExchanger) GetRequisites(task models.InvoiceTask, ex models.Exch
 	}
 	log.Printf("result: %v", result)
 
-	if result["success"] != true {
-		var msg string
-
-		if m, ok := result["message"].(string); ok {
-			msg = m
-		} else if r, ok := result["response"].(string); ok {
-			msg = r
-		} else {
-			msg = "неизвестная ошибка от сервера"
-		}
-
-		return models.DetailsRequisites{}, errors.New(msg)
-	}
-
-	return g.ReturnFormattedDetails(result)
+	return r.ReturnFormattedDetails(result)
 }
 
-func (g *BitlogaExchanger) ReturnFormattedDetails(data map[string]interface{}) (models.DetailsRequisites, error) {
-	id, ok := data["invoiceid"].(string)
-	if !ok {
-		return models.DetailsRequisites{}, errors.New("'id' is empty")
+func (r *RacksExchanger) ReturnFormattedDetails(data map[string]interface{}) (models.DetailsRequisites, error) {
+	msg, ok := data["msg_error"].(string)
+	if !ok || msg != "" {
+		if msg != "" {
+			return models.DetailsRequisites{}, fmt.Errorf("'msg_error' is not empty. Error: %v", msg)
+		} else {
+			return models.DetailsRequisites{}, fmt.Errorf("не удалось получить 'msg_error'")
+		}
 	}
 
-	requisites, ok := data["requisites"].(string)
-	if !ok {
-		return models.DetailsRequisites{}, errors.New("'requisites' не строка")
+	itemsRaw, ok := data["order"].([]interface{})
+	if !ok || len(itemsRaw) == 0 {
+		return models.DetailsRequisites{}, fmt.Errorf("не удалось получить 'order'")
 	}
 
-	amountIn, ok := data["amount_payable"].(float64)
+	order, ok := itemsRaw[0].(map[string]interface{})
 	if !ok {
-		return models.DetailsRequisites{}, errors.New("'amount_payable' не число")
+		return models.DetailsRequisites{}, errors.New("'order' не является объектом")
 	}
 
-	nowUTC := time.Now().UTC()
-	untilAt := (nowUTC.Add(20 * time.Minute)).Format("2006-01-02 15:04:05")
+	externalOrderID, ok := order["id"].(string)
+	if !ok {
+		return models.DetailsRequisites{}, errors.New("не удалось получить 'ID'")
+	}
+
+	requisites, ok := order["cart"].(string)
+	if !ok {
+		return models.DetailsRequisites{}, errors.New("не удалось получить 'cart'")
+	}
+
+	amountRaw, ok := order["amount"].(string)
+	if !ok {
+		return models.DetailsRequisites{}, errors.New("не удалось получить 'amount'")
+	}
+
+	untilAtRaw, ok := order["time_unix"].(int64)
+	if !ok {
+		return models.DetailsRequisites{}, errors.New("не удалось получить 'time_unix'")
+	}
+
+	amount, err := strconv.ParseFloat(amountRaw, 64)
+	if err != nil {
+		return models.DetailsRequisites{}, errors.New("не удалось конвертировать 'amount'")
+	}
+
+	untilAt := time.Unix(untilAtRaw, 0).Format("2006-01-02 15:04:05")
 
 	return models.DetailsRequisites{
-		ID:         id,
-		AmountIn:   amountIn,
+		ID:         externalOrderID,
+		AmountIn:   amount,
 		UntilAt:    untilAt,
 		Requisites: requisites,
 		Details:    data,

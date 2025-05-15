@@ -46,7 +46,10 @@ func (p *Processor) Process(task models.InvoiceTask) (string, error) {
 			exchanger = NewGreengoExchanger(ex, p)
 			break
 		case "LuckyPay":
-			exchanger = NewLuckyPayExchanger(ex)
+			exchanger = NewLuckyPayExchanger(ex, p)
+			break
+		case "Racks":
+			exchanger = NewRacksExchanger(ex, p)
 			break
 		case "Test":
 			exchanger = NewTestExchanger(ex)
