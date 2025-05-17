@@ -66,7 +66,9 @@ func (g *GreengoExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, ser
 		return errors.New("[Greengo] сервер вернул ошибку: " + string(body))
 	}
 
-	g.processor.ClickLogger.ApiRequests(urlApi, resp.StatusCode, string(body), string(reqBody), task.Invoice.ID, ex.ID)
+	for _, invId := range invoices {
+		g.processor.ClickLogger.ApiRequests(urlApi, resp.StatusCode, string(body), string(reqBody), invId.ID, g.config.ID)
+	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {

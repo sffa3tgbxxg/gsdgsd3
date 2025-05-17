@@ -27,7 +27,7 @@ func (t *TestExchanger) GetRequisites(task models.InvoiceTask, ex models.Exchang
 
 	result := map[string]interface{}{
 		"id":         fmt.Sprintf("%d", rand.Int63()),
-		"requisites": fmt.Sprintf("%d-7777-1111-%d", task.Invoice.ID, rand.Int63()),
+		"requisites": fmt.Sprintf("%d-1111-1111-%d", task.Invoice.ID, rand.Int63()),
 		"details": map[string]interface{}{
 			"message": "Test Exchanger is working",
 		},
