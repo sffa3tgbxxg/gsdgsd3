@@ -1,9 +1,6 @@
 package exchanger
 
 import (
-	"bytes"
-	"crypto/hmac"
-	"crypto/sha512"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,29 +25,19 @@ func NewRacksExchanger(config models.Exchanger, processor *Processor) *RacksExch
 func (r *RacksExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, serviceID uint64) error {
 	client := &http.Client{Timeout: 8 * time.Second}
 
-	bodyMap := map[string]interface{}{
-		"action": "details",
-	}
+	tryRequest := func(invoiceID string) (*http.Response, []byte, error) {
+		data := url.Values{}
+		data.Set("id", invoiceID)
+		encoded := data.Encode()
 
-	tryRequest := func() (*http.Response, []byte, error) {
-		reqBody, err := json.Marshal(bodyMap)
+		urlApi := r.config.Endpoint + "/flat_api/status?" + encoded
+		req, err := http.NewRequest("POST", urlApi, nil)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		req, err := http.NewRequest("POST", r.config.Endpoint+"/api/v1/order/", bytes.NewBuffer(reqBody))
-		if err != nil {
-			return nil, nil, err
-		}
-
-		h := hmac.New(sha512.New, []byte(r.config.SecretKey))
-		h.Write([]byte(reqBody))
-		signature := fmt.Sprintf("%x", h.Sum(nil))
-
-		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
-		req.Header.Set("X-APIKEY", r.config.APIKey)
-		req.Header.Set("X-SIGNATURE", signature)
+		req.Header.Set("Authorization", "Bearer "+r.config.APIKey)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -70,31 +57,31 @@ func (r *RacksExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, servi
 		return resp, body, nil
 	}
 
-	processor := NewProcessor()
-
 	for _, invoice := range invoices {
-		bodyMap["uniqueid"] = invoice.ID
-		_, body, err := tryRequest()
+		_, body, err := tryRequest(invoice.ExternalID)
 		if err != nil {
-			fmt.Errorf("[Bitloga] не удалось проверить счет InvoiceID: %v, error: %v", invoice.ID, err)
+			r.processor.ClickLogger.LogErrorApiRequests(invoice.ID, r.config.ID, string(body))
+			fmt.Errorf("[Racks] не удалось проверить счет InvoiceID: %v, error: %v", invoice.ID, err)
 			continue
 		}
 		var result map[string]interface{}
 		if err := json.Unmarshal(body, &result); err != nil {
-			fmt.Errorf("[Bitloga] не удалось проверить счет InvoiceID: %v, error: %v", invoice.ID, err)
+			r.processor.ClickLogger.LogErrorApiRequests(invoice.ID, r.config.ID, string(body))
+			fmt.Errorf("[Racks] не удалось проверить счет InvoiceID: %v, error: %v", invoice.ID, err)
 			continue
 		}
 
 		status, ok := result["status"].(string)
 		if !ok {
-			fmt.Errorf("[Bitloga] не удалось получить статус у InvoiceID: %v, error: %v", invoice.ID, err)
+			r.processor.ClickLogger.LogErrorApiRequests(invoice.ID, r.config.ID, string(body))
+			fmt.Errorf("[Racks] не удалось получить статус у InvoiceID: %v, error: %v", invoice.ID, err)
 			continue
 		}
 
-		err = r.processStatusInvoice(processor, invoice, status)
+		err = r.processStatusInvoice(&r.processor, invoice, status)
 
 		if err != nil {
-			fmt.Errorf("[Bitloga] не удалось обрабатотать статус у InvoiceID: %v, error: %v", invoice.ID, err)
+			fmt.Errorf("[Racks] не удалось обрабатотать статус у InvoiceID: %v, error: %v", invoice.ID, err)
 			continue
 		}
 	}
@@ -103,27 +90,25 @@ func (r *RacksExchanger) CheckInvoices(invoices []models.InvoiceCheckLite, servi
 }
 
 func (r *RacksExchanger) processStatusInvoice(processor *Processor, invoice models.InvoiceCheckLite, orderStatus string) error {
+	var status string
 	switch orderStatus {
-	case "Payed":
-		err := processor.MysqlLogger.UpdateInvoiceStatus(invoice, "paid")
-		if err != nil {
-			return err
-		}
+	case "Done":
+		status = "paid"
 	case "Pending":
 		return nil
-	case "Error":
-		err := processor.MysqlLogger.UpdateInvoiceStatus(invoice, "error")
-		if err != nil {
-			return err
-		}
-	case "Canceled":
-		err := processor.MysqlLogger.UpdateInvoiceStatus(invoice, "cancel_time")
-		if err != nil {
-			return err
-		}
+	case "Cancel":
+		status = "cancel_time"
 	default:
 		return errors.New("Не получилось обработать статус")
 	}
+
+	err := processor.MysqlLogger.UpdateInvoiceStatus(invoice, status)
+	details := "OrderStatus: " + orderStatus
+	r.processor.ClickLogger.InvoiceHistoryInsert(invoice.ID, "golang_process_status", status, nil, &details)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -134,6 +119,7 @@ func (r *RacksExchanger) GetRequisites(task models.InvoiceTask, ex models.Exchan
 	data.Set("typecommission", "1")
 	data.Set("private_key", ex.SecretKey)
 	data.Set("currency", "RUB")
+	data.Set("callback", ex.Callback)
 
 	encoded := data.Encode()
 

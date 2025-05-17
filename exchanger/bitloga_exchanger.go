@@ -130,13 +130,14 @@ func (g *BitlogaExchanger) GetRequisites(task models.InvoiceTask, ex models.Exch
 
 	// Данные для запроса
 	data := map[string]interface{}{
-		"action":   "invoice",
-		"uniqueid": fmt.Sprintf("%v", task.Invoice.ID),
-		"paysys":   "RUBBALANCE",
-		"amount":   ex.Amount,
-		"comis":    "payer",
-		"name":     "test",
-		"surname":  "test2",
+		"action":      "invoice",
+		"uniqueid":    fmt.Sprintf("%v", task.Invoice.ID),
+		"paysys":      "RUBBALANCE",
+		"amount":      ex.Amount,
+		"comis":       "payer",
+		"name":        "test",
+		"surname":     "test2",
+		"callbackurl": ex.Callback,
 	}
 
 	reqBody, err := json.Marshal(data)

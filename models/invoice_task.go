@@ -23,6 +23,7 @@ type Exchanger struct {
 	Amount    float64 `json:"amount"`
 	APIKey    string  `json:"api_key"`
 	SecretKey string  `json:"secret_key"`
+	Callback  string  `json:"callback"`
 }
 
 type DetailsRequisites struct {
